@@ -1,0 +1,23 @@
+# Build directories
+build/
+cmake-build-*/
+
+# Compiled binaries
+test_moqm
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+compile_commands.json
+
+# OS files
+.DS_Store
+Thumbs.db
