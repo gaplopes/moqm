@@ -405,9 +405,22 @@ moqm::Point<int> q({1, 2, 3});    // integer points
 5. **ε-indicator** requires all point components to be strictly positive. `epsilon_ratio` throws `std::invalid_argument` if a denominator component is ≤ 0.
 6. **GLPK dependency** is required only for `classification.hpp`.
 
-## Citations
+## Contributing
 
+Contributions are welcome! If you have bug fixes, new problem implementations, additional strategies, or other improvements, please fork the repository and open a pull request. For major changes, consider opening an issue first to discuss the approach.
 
+## Citation
+
+If you use this library in your research, please cite the original papers and this implementation as follows:
+
+```bibtex
+@software{moqm,
+  author = {Lopes, Gon{\c{c}}alo},
+  title = {{moqm}: A {C++} Library for Multiobjective Quality Metrics of Nondominated Set Representations},
+  year = {2026},
+  url = {https://github.com/gaplopes/moqm}
+}
+```
 
 ## References
 
@@ -417,3 +430,4 @@ moqm::Point<int> q({1, 2, 3});    // integer points
 ## License
 
 See [LICENSE](LICENSE) for details.
+
