@@ -54,6 +54,40 @@ compute_range_weights(const PointSet<T> &pts, double eps = 1e-12) {
   return w;
 }
 
+/// @brief Helper to compute standard Tchebycheff weights from a point set.
+///
+/// Weight w_j = 1 / (max_j - min_j). If max_j == min_j, w_j = 1.0.
+///
+/// @param pts The point set to compute bounds from.
+/// @return A vector of weights suitable for WeightedTchebycheffDistance.
+template <typename T>
+[[nodiscard]] inline std::vector<double>
+compute_tchebycheff_weights(const PointSet<T> &pts) {
+  if (pts.empty())
+    return {};
+
+  const std::size_t m = pts[0].dim();
+  std::vector<double> mins(m, std::numeric_limits<double>::max());
+  std::vector<double> maxs(m, std::numeric_limits<double>::lowest());
+
+  for (const auto &p : pts) {
+    for (std::size_t j = 0; j < m; ++j) {
+      mins[j] = std::min(mins[j], static_cast<double>(p[j]));
+      maxs[j] = std::max(maxs[j], static_cast<double>(p[j]));
+    }
+  }
+
+  std::vector<double> weights(m, 1.0);
+  for (std::size_t j = 0; j < m; ++j) {
+    double range = maxs[j] - mins[j];
+    if (range > 1e-12) {
+      weights[j] = 1.0 / range;
+    }
+  }
+
+  return weights;
+}
+
 // ---------------------------------------------------------------------------
 // Range computation
 // ---------------------------------------------------------------------------
@@ -207,6 +241,10 @@ struct WeightedTchebycheffDistance {
 
   explicit WeightedTchebycheffDistance(std::vector<double> w)
       : weights(std::move(w)) {}
+
+  template <typename T>
+  explicit WeightedTchebycheffDistance(const PointSet<T> &reference_set)
+      : weights(compute_tchebycheff_weights(reference_set)) {}
 
   template <typename T>
   double operator()(const Point<T> &a, const Point<T> &b) const {
