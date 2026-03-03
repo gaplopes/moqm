@@ -291,9 +291,13 @@ int main() {
     double hvr = hypervolume_ratio(Y_N, R, ref, Sense::Maximize);
     std::cout << "HVR(R) = " << hvr << "\n";
 
-    // Using custom distance (Chebyshev)
+    // Using custom discrete distance (Chebyshev)
     double ce_cheb = coverage_error(Y_N, R, ChebyshevDistance{});
     std::cout << "CE_cheb = " << ce_cheb << "\n";
+
+    // Auto-calculating weights for Weighted Tchebycheff based on Y_N
+    double ce_tch = coverage_error(Y_N, R, WeightedTchebycheffDistance(Y_N));
+    std::cout << "CE_tch = " << ce_tch << "\n";
 
     return 0;
 }
@@ -315,14 +319,14 @@ int main() {
     };
     std::size_t k = 3;  // select 3 representatives
 
-    // Maximize uniformity (exact, O(kn))
+    // Maximize uniformity (exact, O(kn)) — uses default EuclideanDistance
     auto [u_val, u_subset] = dp_max_uniformity(B, k);
     std::cout << "Optimal uniformity: " << u_val << "\n";
     for (const auto& p : u_subset) std::cout << p.to_string() << " ";
     std::cout << "\n";
 
-    // Minimize coverage (exact, O(kn))
-    auto [c_val, c_subset] = dp_min_coverage(B, k);
+    // Minimize coverage (exact, O(kn)) — changing default to WeightedTchebycheffDistance
+    auto [c_val, c_subset] = dp_min_coverage(B, k, WeightedTchebycheffDistance(B));
     std::cout << "Optimal coverage: " << c_val << "\n";
 
     // Minimize ε-indicator (exact, O(kn))
@@ -385,6 +389,53 @@ int main() {
 }
 ```
 
+## Distance Metrics
+
+Both indicators and representation solvers require a method to measure distance between points. If a custom distance is not provided, the library defaults to the exact mathematical definitions established in the source literature:
+- `uniformity` estimators (`dp_max_uniformity`, `thresh_max_uniformity`): **EuclideanDistance**
+- `coverage_error` estimators (`dp_min_coverage`, `thresh_min_coverage`, `median_error`): **WeightedTchebycheffDistance**
+- `epsilon_indicator` estimators (`dp_min_epsilon`, `thresh_min_epsilon`): uses a directional **EpsilonRatio** internally.
+
+You can override these defaults by passing a custom functor as the final argument. The library natively provides the following ready-to-use metrics:
+- `EuclideanDistance()`
+- `ChebyshevDistance()`
+- `LpNormDistance(double p)`
+- `EpsilonRatio(Sense s)`
+- `WeightedTchebycheffDistance(std::vector<double> w)` or `WeightedTchebycheffDistance(const PointSet<T>& reference_set)`
+
+### Examples
+You can easily pass these distance metrics directly into your indicators and representation solvers.
+
+**Using Euclidean Distance (Default for Uniformity):**
+```cpp
+#include <moqm/indicators.hpp>
+#include <moqm/distance.hpp>
+
+// Explicitly using Euclidean distance
+double iu = uniformity(R, EuclideanDistance{});
+```
+
+**Using Weighted Tchebycheff (Default for Coverage):**
+The library offers a constructor for the Weighted Tchebycheff metric. By passing the complete reference set $Y_N$ to the constructor, the library **automatically** calculates the $\max$ and $\min$ boundary values across all dimensions to generate the appropriate normalized weights dynamically:
+
+```cpp
+#include <moqm/distance.hpp>
+
+// Automatically calculates w_j = 1 / (max_j - min_j) across the set B
+WeightedTchebycheffDistance dist_tch(B);
+
+// The functor is then ready to be plugged into any solver!
+auto result = dp_min_coverage(B, k, dist_tch);
+```
+
+**Using an Explicit L-p Norm:**
+```cpp
+#include <moqm/distance.hpp>
+
+// Use L-3 Norm
+LpNormDistance dist_lp3(3.0);
+double ce = coverage_error(Y_N, R, dist_lp3);
+```
 
 ## Namespace
 
@@ -430,4 +481,3 @@ If you use this library in your research, please cite the original papers and th
 ## License
 
 See [LICENSE](LICENSE) for details.
-
