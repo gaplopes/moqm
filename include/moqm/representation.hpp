@@ -221,9 +221,9 @@ dp_max_uniformity(PointSet<T> B, std::size_t k,
 /// @tparam DistanceFn  Callable with signature double(Point, Point).
 /// @param B            Non-dominated set (must be biobjective, m=2).
 /// @param k            Desired cardinality of representation.
-/// @param dist         Distance function (default: Euclidean).
+/// @param dist         Distance function (default: WeightedTchebycheffDistance).
 /// @return             RepresentationResult with optimal value and subset.
-template <typename T = double, typename DistanceFn = EuclideanDistance>
+template <typename T = double, typename DistanceFn = WeightedTchebycheffDistance>
 [[nodiscard]] inline RepresentationResult<T>
 dp_min_coverage(PointSet<T> B, std::size_t k, DistanceFn dist = DistanceFn{}) {
   B = detail::prepare_biobjective(std::move(B));
@@ -577,9 +577,9 @@ thresh_max_uniformity(PointSet<T> B, std::size_t k,
 ///
 /// @param B     Non-dominated set (must be biobjective, m=2).
 /// @param k     Desired cardinality.
-/// @param dist  Distance function (default: Euclidean).
+/// @param dist  Distance function (default: WeightedTchebycheffDistance).
 /// @return      RepresentationResult with optimal coverage and subset.
-template <typename T = double, typename DistanceFn = EuclideanDistance>
+template <typename T = double, typename DistanceFn = WeightedTchebycheffDistance>
 [[nodiscard]] inline RepresentationResult<T>
 thresh_min_coverage(PointSet<T> B, std::size_t k,
                     DistanceFn dist = DistanceFn{}) {
@@ -609,31 +609,21 @@ thresh_min_coverage(PointSet<T> B, std::size_t k,
                   [](double a, double b) { return std::abs(a - b) < 1e-12; }),
       thresholds.end());
 
-  // Greedy feasibility: can we cover all points with k centers within t?
+  // Sequential greedy feasibility: can we cover all points with k centers within t?
   auto is_feasible = [&](double t) -> bool {
-    std::vector<bool> covered(n, false);
+    std::size_t covered_up_to = 0;
     for (std::size_t c = 0; c < k; ++c) {
-      std::size_t best_r = 0, best_count = 0;
-      for (std::size_t r = 0; r < n; ++r) {
-        std::size_t cnt = 0;
-        for (std::size_t b = 0; b < n; ++b)
-          if (!covered[b] && D[b][r] <= t + 1e-12)
-            ++cnt;
-        if (cnt > best_count) {
-          best_count = cnt;
-          best_r = r;
-        }
-      }
-      if (best_count == 0)
-        break;
-      for (std::size_t b = 0; b < n; ++b)
-        if (D[b][best_r] <= t + 1e-12)
-          covered[b] = true;
+      if (covered_up_to >= n)
+        return true;
+      std::size_t r = covered_up_to;
+      while (r + 1 < n && D[covered_up_to][r + 1] <= t + 1e-12)
+        r++;
+      std::size_t next_covered = r;
+      while (next_covered + 1 < n && D[r][next_covered + 1] <= t + 1e-12)
+        next_covered++;
+      covered_up_to = next_covered + 1;
     }
-    for (bool c : covered)
-      if (!c)
-        return false;
-    return true;
+    return covered_up_to >= n;
   };
 
   // Binary search: smallest feasible threshold
@@ -648,28 +638,33 @@ thresh_min_coverage(PointSet<T> B, std::size_t k,
   double opt_t = thresholds[lo];
 
   // Reconstruct
-  std::vector<bool> selected(n, false), covered(n, false);
   PointSet<T> subset;
   subset.reserve(k);
+  std::size_t covered_up_to = 0;
+  std::vector<bool> selected(n, false);
+
   for (std::size_t c = 0; c < k; ++c) {
-    std::size_t best_r = 0, best_count = 0;
-    for (std::size_t r = 0; r < n; ++r) {
-      if (selected[r])
-        continue;
-      std::size_t cnt = 0;
-      for (std::size_t b = 0; b < n; ++b)
-        if (!covered[b] && D[b][r] <= opt_t + 1e-12)
-          ++cnt;
-      if (cnt > best_count) {
-        best_count = cnt;
-        best_r = r;
-      }
+    if (covered_up_to >= n)
+      break; // Already covered
+    std::size_t r = covered_up_to;
+    while (r + 1 < n && D[covered_up_to][r + 1] <= opt_t + 1e-12)
+      r++;
+
+    selected[r] = true;
+    subset.push_back(B[r]);
+
+    std::size_t next_covered = r;
+    while (next_covered + 1 < n && D[r][next_covered + 1] <= opt_t + 1e-12)
+      next_covered++;
+    covered_up_to = next_covered + 1;
+  }
+
+  // Pad subset to size k if necessary (with arbitrary unselected points)
+  for (std::size_t i = 0; i < n && subset.size() < k; ++i) {
+    if (!selected[i]) {
+      selected[i] = true;
+      subset.push_back(B[i]);
     }
-    selected[best_r] = true;
-    subset.push_back(B[best_r]);
-    for (std::size_t b = 0; b < n; ++b)
-      if (D[b][best_r] <= opt_t + 1e-12)
-        covered[b] = true;
   }
 
   double actual_cov = coverage_error(B, subset, dist);
