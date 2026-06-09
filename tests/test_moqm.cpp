@@ -78,7 +78,7 @@ int main() {
     std::cout << " " << p.to_string(1);
   std::cout << "\n";
 
-  auto [c_val, c_sub] = dp_min_coverage(B, k);
+  auto [c_val, c_sub] = dp_min_coverage(B, k, EuclideanDistance{});
   std::cout << "DP Coverage (k=" << k << "): " << c_val << "\n";
   std::cout << "  Subset:";
   for (const auto &p : c_sub)
@@ -93,7 +93,7 @@ int main() {
   std::cout << "\n";
 
   // Trivial tests
-  auto [c_full, c_full_sub] = dp_min_coverage(B, B.size());
+  auto [c_full, c_full_sub] = dp_min_coverage(B, B.size(), EuclideanDistance{});
   assert(std::abs(c_full) < 1e-9 && "Coverage should be 0 when k=n");
   std::cout << "\nDP Coverage (k=n): " << c_full << " ✓\n";
 

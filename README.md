@@ -1,6 +1,6 @@
 # moqm — Multiobjective Quality Metrics
 
-> **Header-only C++17 library** for evaluating the quality of representations of nondominated sets in multiobjective discrete optimization problems.
+> **Header-only C++20 library** for evaluating the quality of representations of nondominated sets in multiobjective discrete optimization problems.
 
 ## Overview
 
@@ -30,7 +30,7 @@ The library implements quality metrics and algorithms from two key papers:
 | Coverage Error (CE) | Worst-case distance from Y_N to R | Any m |
 | Median Error (ME) | Median of per-point errors | Any m |
 | Range Ratio (RR) | Average per-objective range coverage | Any m |
-| Hypervolume Ratio (HVR) | HV(R) / HV(Y_N) | m = 2 only |
+| Hypervolume Ratio (HVR) | HV(R) / HV(Y_N) | Any m |
 | Uniformity (I_U) | Min pairwise distance in R | Any m |
 | ε-Indicator (I_ε) | Multiplicative approximation ratio | Any m |
 | DP Uniformity Solver | k-subset maximizing I_U | m = 2 only |
@@ -82,13 +82,13 @@ include/
 
 | Module | External Dependencies |
 |---|---|
-| `point.hpp` | None (C++17 STL only) |
+| `point.hpp` | None (C++20 STL only) |
 | `distance.hpp` | None |
-| `indicators.hpp` | None |
+| `indicators.hpp` | **mooutils** (for hypervolume) |
 | `representation.hpp` | None |
 | `classification.hpp` | **GLPK** |
 
-The only module that requires GLPK is `classification.hpp` (for LP-based supported/extreme point identification).  All other modules — including the DP and threshold solvers — are dependency-free.
+The module `classification.hpp` requires GLPK (for LP-based supported/extreme point identification), and `indicators.hpp` requires `mooutils` for exact hypervolume computation in arbitrary dimensions.  All other modules — including the DP and threshold solvers — are dependency-free.
 
 ## Building & Testing
 
@@ -109,17 +109,17 @@ target_link_libraries(your_target PRIVATE moqm)
 ### Standalone (no CMake, no GLPK)
 
 Since moqm is header-only, you can simply copy the `include/moqm/` directory
-into your project and compile directly:
+into your project and compile directly. However, if you use `indicators.hpp`, you must also provide `mooutils`.
 
 ```bash
-# Without GLPK (all modules except classification)
-g++ -std=c++17 -I include your_code.cpp -o your_program
+# Without GLPK or mooutils (only DP/threshold solvers, point/distance utilities)
+g++ -std=c++20 -I include your_code.cpp -o your_program
 
 # With GLPK (classification module)
-g++ -std=c++17 -I include your_code.cpp -lglpk -o your_program
+g++ -std=c++20 -I include your_code.cpp -lglpk -o your_program
 
 # Run the library tests
-g++ -std=c++17 -I include tests/test_moqm.cpp -o test_moqm && ./test_moqm
+g++ -std=c++20 -I include tests/test_moqm.cpp -o test_moqm && ./test_moqm
 ```
 
 ## Templated `Point<T>`
@@ -147,8 +147,8 @@ Functions that depend on the optimization direction take a `Sense` parameter ins
 double eps = epsilon_indicator(Y_N, R, Sense::Maximize);
 double eps = epsilon_indicator(Y_N, R, Sense::Minimize);
 
-// Hypervolume 2D (unified)
-double hv = detail::hypervolume_2d(pts, ref, Sense::Maximize);
+// Hypervolume (unified, any m)
+double hv = hypervolume(pts, ref, Sense::Maximize);
 
 // ε-ratio (unified)
 double er = epsilon_ratio(r, b, Sense::Maximize);
@@ -237,7 +237,7 @@ min α_k s.t. Σα_j · y^j = y^k, Σα_j = 1, α ≥ 0. If α_k* = 1, then y^k 
 | Coverage Error | O(\|Y_N\| · \|R\| · m) | O(1) |
 | Median Error | O(\|Y_N\| · \|R\| · m + \|Y_N\| log \|Y_N\|) | O(\|Y_N\|) |
 | Range Ratio | O((\|Y_N\| + \|R\|) · m) | O(m) |
-| Hypervolume (2D) | O(n log n) | O(n) |
+| Hypervolume | Depends on m | - |
 | Uniformity | O(\|R\|² · m) | O(1) |
 | ε-Indicator | O(\|Y_N\| · \|R\| · m) | O(1) |
 | DP Uniformity | O(kn + n log n) | O(kn) |
@@ -452,9 +452,9 @@ moqm::Point<int> q({1, 2, 3});    // integer points
 1. **Biobjective DP solvers** require exactly m = 2 objectives. They throw `std::invalid_argument` if applied to higher-dimensional point sets.
 2. **Combined DP solvers** (§6.1–6.4) are declared but not yet implemented. Calling them throws `std::logic_error`.
 3. **Threshold solvers** are exact for m=2 (exploiting the sorted staircase property) and serve as cross-validation for the DP solvers. They are O(n² log n), slower than O(kn) DP.
-4. **Hypervolume** uses an exact sweep-line for 2D. For m ≥ 3, it is not implemented yet.
+4. **Hypervolume** is computed via the `mooutils` library, which supports 2D, 3D, and general dimensions (using WFG).
 5. **ε-indicator** requires all point components to be strictly positive. `epsilon_ratio` throws `std::invalid_argument` if a denominator component is ≤ 0.
-6. **GLPK dependency** is required only for `classification.hpp`.
+6. **GLPK dependency** is required only for `classification.hpp`, while **mooutils** is required for hypervolume evaluation in `indicators.hpp`.
 
 ## Contributing
 

@@ -19,6 +19,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <mooutils/indicators.hpp>
+
 #include "distance.hpp"
 #include "point.hpp"
 
@@ -227,100 +229,44 @@ epsilon_indicator(const PointSet<T> &B, const PointSet<T> &R, Sense sense) {
 }
 
 // ===================================================================
-// Hypervolume (2D exact via sweep-line)
-// ===================================================================
-
-namespace detail {
-
-/// @brief Compute 2D hypervolume parameterised by optimization sense.
-///
-/// Complexity: O(n log n)
-///
-/// @param pts    The point set.
-/// @param ref    The reference point.
-/// @param sense  optimization sense.
-/// @return       The hypervolume value.
-template <typename T>
-[[nodiscard]] inline double hypervolume_2d(PointSet<T> pts, const Point<T> &ref,
-                                           Sense sense) {
-  if (pts.empty() || ref.dim() != 2)
-    return 0.0;
-
-  if (sense == Sense::Maximize) {
-    // Sort by first component descending.
-    std::sort(pts.begin(), pts.end(),
-              [](const Point<T> &a, const Point<T> &b) { return a[0] > b[0]; });
-    double hv = 0.0;
-    double y2_prev = static_cast<double>(ref[1]);
-    for (const auto &p : pts) {
-      if (p[0] <= ref[0] || p[1] <= ref[1])
-        continue;
-      double p1 = static_cast<double>(p[1]);
-      if (p1 > y2_prev) {
-        double width = static_cast<double>(p[0]) - static_cast<double>(ref[0]);
-        double height = p1 - y2_prev;
-        hv += width * height;
-        y2_prev = p1;
-      }
-    }
-    return hv;
-  } else {
-    // Sort by first component ascending.
-    std::sort(pts.begin(), pts.end(),
-              [](const Point<T> &a, const Point<T> &b) { return a[0] < b[0]; });
-    double hv = 0.0;
-    double y2_prev = static_cast<double>(ref[1]);
-    for (const auto &p : pts) {
-      if (p[0] >= ref[0] || p[1] >= ref[1])
-        continue;
-      double p1 = static_cast<double>(p[1]);
-      if (p1 < y2_prev) {
-        double width = static_cast<double>(ref[0]) - static_cast<double>(p[0]);
-        double height = y2_prev - p1;
-        hv += width * height;
-        y2_prev = p1;
-      }
-    }
-    return hv;
-  }
-}
-
-/// @brief Compute hypervolume for general dimensions using
-///        inclusion-exclusion (exact but exponential in m).
-///
-/// For m == 2, delegates to the efficient sweep-line implementation.
-/// For m > 2, returns 0.0. (Not implemented yet)
-template <typename T>
-[[nodiscard]] inline double
-hypervolume_general(const PointSet<T> &pts, const Point<T> &ref, Sense sense) {
-  if (pts.empty())
-    return 0.0;
-  const std::size_t m = pts.front().dim();
-
-  if (m == 2) {
-    return hypervolume_2d(pts, ref, sense);
-  }
-
-  if (sense == Sense::Minimize) {
-    throw std::runtime_error(
-        "moqm::hypervolume: Minimize sense not implemented for m > 2.");
-  }
-
-  return 0.0;
-}
-
-} // namespace detail
-
-// ===================================================================
 // Hypervolume Ratio — HVR(R) = HV(R) / HV(Y_N)
 // ===================================================================
 
 /// @brief Hypervolume of a point set with respect to a reference point.
+///
+/// Uses mooutils::hv which supports any number of dimensions
+/// (2D sweep, 3D+, and WFG for higher dimensions).
+/// For Minimize sense, the points and reference are negated so that
+/// the maximization-oriented mooutils algorithm can be used directly.
 template <typename T>
 [[nodiscard]] inline double hypervolume(const PointSet<T> &pts,
                                         const Point<T> &ref,
                                         Sense sense = Sense::Maximize) {
-  return detail::hypervolume_general(pts, ref, sense);
+  if (pts.empty())
+    return 0.0;
+
+  const std::size_t m = ref.dim();
+
+  // mooutils assumes maximization: all points must dominate the reference.
+  // For minimization, negate everything to convert to a maximization problem.
+  const double sign = (sense == Sense::Maximize) ? 1.0 : -1.0;
+
+  // Convert Point<T> to std::vector<double> for mooutils compatibility.
+  auto to_vec = [&](const Point<T> &p) {
+    std::vector<double> v(m);
+    for (std::size_t i = 0; i < m; ++i)
+      v[i] = sign * static_cast<double>(p[i]);
+    return v;
+  };
+
+  std::vector<std::vector<double>> vecs;
+  vecs.reserve(pts.size());
+  for (const auto &p : pts)
+    vecs.push_back(to_vec(p));
+
+  std::vector<double> r = to_vec(ref);
+
+  return mooutils::hv<double>(vecs, r);
 }
 
 /// @brief Hypervolume Ratio: HV(R) / HV(Y_N).

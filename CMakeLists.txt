@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.18)
 
 project(moqm-tests)
 
-# Set the C++ standard
-set(CMAKE_CXX_STANDARD 17)
+# Set the C++ standard (mooutils requires C++20 for concepts/ranges)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Set the build type to Release by default
@@ -57,12 +57,22 @@ else()
   message(STATUS "GLPK not found — classification.hpp will not be usable")
 endif()
 
+# mooutils: hypervolume computation backend
+include(FetchContent)
+FetchContent_Declare(
+  mooutils
+  GIT_REPOSITORY https://github.com/adbjesus/mooutils.git
+  GIT_TAG main
+)
+FetchContent_MakeAvailable(mooutils)
+target_link_libraries(moqm INTERFACE mooutils)
+
 # ---- moqm library tests (dependency-free, no GLPK needed) ----
 enable_testing()
 
 add_executable(test_moqm ${CMAKE_SOURCE_DIR}/tests/test_moqm.cpp)
-target_include_directories(test_moqm PRIVATE ${CMAKE_SOURCE_DIR}/include)
-target_compile_features(test_moqm PRIVATE cxx_std_17)
+target_link_libraries(test_moqm PRIVATE moqm)
+target_compile_features(test_moqm PRIVATE cxx_std_20)
 target_compile_options(test_moqm PRIVATE ${MOQM_CXX_WARN_FLAGS})
 
 add_test(NAME moqm_tests COMMAND test_moqm)
